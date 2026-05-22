@@ -3,49 +3,47 @@ name: CI-CD Docker Pipeline
 on:
   push:
     branches:
-      - main
+      - trivy
 
 env:
   IMAGE_NAME: app
   IMAGE_TAG: latest
-  DOCKER_REGISTRY: docker.io
+  DOCKER_REGISTRY: latyrdioh
 
 jobs:
-  build:
+  ci:
     runs-on: ubuntu-latest
-    steps:
-      - name: Checkout source code
-        uses: actions/checkout@v4
-
-      - name: Build Docker image
-        run: |
-          docker build -t latyrdioh/app:latest .
-
-  test:
-    runs-on: ubuntu-latest
-    needs: build
-    steps:
-      - name: Checkout source code
-        uses: actions/checkout@v4
-
-      - name: Build image for test
-        run: docker build -t latyrdioh/app:latest .
-
-      - name: Test image
-        run: docker run --rm latyrdioh/app:latest nginx -t
-
-  push:
-    runs-on: ubuntu-latest
-    needs: test
     steps:
       - name: Checkout source code
         uses: actions/checkout@v4
 
       - name: Login to Docker Hub
         run: |
-          echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
+          echo "${{ secrets.DOCKER_PASSWORD }}" | \
+          docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
 
-      - name: Build and Push Docker image
+      - name: Build Docker image
         run: |
           docker build -t latyrdioh/app:latest .
+
+      - name: Push Docker image
+        run: |
           docker push latyrdioh/app:latest
+
+  scan:
+    needs: ci
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install Trivy
+        run: |
+          curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin
+
+      - name: Scan Docker image
+        run: |
+          trivy image latyrdioh/app:latest | tee trivy-report.txt
+
+      - name: Upload Trivy report
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-report
+          path: trivy-report.txt
